@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>박수란 신문사설 데이터베이스 시스템</title>
+    <style>
+        body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; line-height: 1.6; background-color: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1a73e8; border-bottom: 3px solid #1a73e8; padding-bottom: 10px; }
+        
+        /* 검색창 영역 */
+        .search-section { background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 30px; border: 1px solid #dee2e6; }
+        .search-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 5px; font-size: 15px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .btn:hover { background: #1557b0; }
+
+        /* 결과 리스트 영역 */
+        .article-card { border-left: 5px solid #1a73e8; background: #fff; padding: 15px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-radius: 0 5px 5px 0; }
+        .article-title { font-size: 1.2em; font-weight: bold; color: #202124; margin-bottom: 5px; }
+        .article-info { font-size: 0.9em; color: #5f6368; margin-bottom: 10px; }
+        .tag { display: inline-block; background: #e8f0fe; color: #1967d2; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-right: 5px; }
+        .highlight { background-color: yellow; font-weight: bold; }
+        #no-result { text-align: center; color: #d93025; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>신문사설 데이터베이스</h1>
+
+    <div class="search-section">
+        <div class="search-grid">
+            <input type="text" id="searchInput" placeholder="검색어를 입력하세요...">
+            <select id="searchTarget">
+                <option value="all">텍스트 전체 단어로 검색</option>
+                <option value="author">작성자로 검색</option>
+                <option value="structure">신문사설 구조(제목/구조) 검색</option>
+                <option value="background">백그라운드 단어로 검색</option>
+                <option value="evidence">에비던스(팩트 근거) 검색</option>
+                <option value="fact">팩트에 있는 단어로 검색</option>
+            </select>
+        </div>
+        <button class="btn" onclick="searchArticles()">신문사설 검색하기</button>
+    </div>
+
+    <div id="resultCount" style="margin-bottom: 10px; font-weight: bold;"></div>
+    <div id="articleList"></div>
+    <div id="no-result">검색 결과가 없습니다. 다른 검색어를 입력해 주세요.</div>
+</div>
+
+<script>
+// 10개의 사설 데이터베이스 (XML 구조를 JSON으로 변환하여 저장)
+const database = [
+    { author: "김철수", title: "디지털 교과서 도입, 준비는 되었나", background: "정부가 내년부터 초중고에 디지털 교과서를 전면 도입하기로 했다.", facts: ["일부 학교는 여전히 무선 네트워크 환경이 불안정하다.", "교사들의 디지털 기기 활용 능력에 차이가 크다."], opinion: "인프라 구축과 교사 연수가 선행되어야 한다." },
+    { author: "이영희", title: "일회용컵 보증금제, 후퇴해서는 안 된다", background: "환경부가 일회용컵 보증금제 시행을 지자체 자율에 맡기기로 했다.", facts: ["플라스틱 배출량은 매년 최고치를 경신하고 있다.", "재활용률은 여전히 40%대 수준이다."], opinion: "강력한 규제 없이 환경 보호를 실천하기는 어렵다." },
+    { author: "박지성", title: "금리 동결, 민생 경제 활력이 우선이다", background: "한국은행이 기준금리를 현재 수준에서 유지하기로 결정했다.", facts: ["가계 부채가 1,800조 원을 넘어섰다.", "소비자 물가 상승률이 다소 둔화되는 추세다."], opinion: "서민들의 이자 부담을 고려한 결정이지만 경계심은 늦추지 말아야 한다." },
+    { author: "최민수", title: "생성형 AI의 그림자, 저작권 보호 대책 급선무", background: "AI가 만든 창작물이 예술계 전반으로 확산되고 있다.", facts: ["국내 저작권법에는 AI 창작물 규정이 없다.", "해외에서는 AI 기업 상대 소송이 잇따르고 있다."], opinion: "기술 발전과 창작자 권리 보호 사이의 법적 가이드라인이 필요하다." },
+    { author: "정소민", title: "고령화 사회, 노인 일자리가 최고의 복지다", background: "한국의 고령화 속도가 세계에서 가장 빠르게 진행되고 있다.", facts: ["65세 이상 인구 비중이 20% 돌파를 앞두고 있다.", "노인 빈곤율은 OECD 국가 중 상위권이다."], opinion: "전문성을 살린 민간 일자리 확충에 국가적 역량을 집중해야 한다." },
+    { author: "한강수", title: "출산율 0.7명의 경고, 파격적인 주거 지원이 답이다", background: "지난해 합계출산율이 역대 최저치를 기록하며 인구 절벽이 현실화되었다.", facts: ["청년층의 가장 큰 고민은 주거비용이다.", "맞벌이 가구 보육 공백이 심각하다."], opinion: "현금 지급보다 실질적인 정주 여건 개선이 시급하다." },
+    { author: "오윤아", title: "개인형 이동장치 안전, 헬멧 착용만으론 부족하다", background: "전동 킥보드 등 개인형 이동장치(PM) 사고가 급증하고 있다.", facts: ["인도 주행 금지 구역에서 무분별 주행이 빈번하다.", "면허 확인 절차가 부실한 업체가 많다."], opinion: "전용 도로 확충과 업체 관리 책임을 강화해야 한다." },
+    { author: "임성진", title: "지역 필수의료 붕괴, 의대 정원 확대가 끝이 아니다", background: "응급실 뺑뺑이 사건이 반복되며 지역 의료 체계에 빨간불이 켜졌다.", facts: ["수도권 병원 쏠림으로 지방 의료진 이탈이 심화된다.", "기피 과목 전공의 지원율이 매우 낮다."], opinion: "지방 근무 유인책과 수가 개선이 반드시 동반되어야 한다." },
+    { author: "강하늘", title: "주 4일제 논의, 생산성 향상이 전제되어야", background: "일부 대기업과 IT 업계를 중심으로 주 4일제 도입 논의가 활발하다.", facts: ["워라밸을 중시하는 MZ 세대의 요구가 높다.", "중소기업들은 인건비 부담을 우려하고 있다."], opinion: "임금 삭감 없는 생산성 유지 가능성을 면밀히 검토해야 한다." },
+    { author: "조유리", title: "K-컬처의 지속 가능성, 기초 예술 지원에 달렸다", background: "한국의 영화, 드라마, 음악이 세계적인 인기를 얻고 있다.", facts: ["순수 예술 및 기초 문학 분야 예산은 줄어들었다.", "연극, 국악 현장의 어려움이 가중되고 있다."], opinion: "문화의 뿌리인 기초 예술 생태계를 보호해야 한다." }
+];
+
+function searchArticles() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    const target = document.getElementById('searchTarget').value;
+    const listContainer = document.getElementById('articleList');
+    const noResult = document.getElementById('no-result');
+    const resultCount = document.getElementById('resultCount');
+
+    if (!query) {
+        alert("검색어를 입력해 주세요!");
+        return;
+    }
+
+    // 필터링 로직
+    const filtered = database.filter(item => {
+        const factsText = item.facts.join(" ");
+        const allText = (item.author + item.title + item.background + factsText + item.opinion).toLowerCase();
+
+        switch(target) {
+            case 'all': return allText.includes(query);
+            case 'author': return item.author.toLowerCase().includes(query);
+            case 'structure': return item.title.toLowerCase().includes(query);
+            case 'background': return item.background.toLowerCase().includes(query);
+            case 'evidence': // 에비던스는 팩트 내의 상세 근거로 간주
+            case 'fact': return factsText.toLowerCase().includes(query);
+            default: return false;
+        }
+    });
+
+    // 결과 렌더링
+    listContainer.innerHTML = '';
+    resultCount.innerText = `검색 결과: ${filtered.length}건`;
+
+    if (filtered.length === 0) {
+        noResult.style.display = 'block';
+    } else {
+        noResult.style.display = 'none';
+        filtered.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'article-card';
+            card.innerHTML = `
+                <div class="article-title">${item.title}</div>
+                <div class="article-info">
+                    <span class="tag">작성자: ${item.author}</span>
+                    <span class="tag">구조: 서론-본론-결론</span>
+                </div>
+                <div><strong>[배경]</strong> ${item.background}</div>
+                <div><strong>[팩트]</strong> ${item.facts.join(" / ")}</div>
+                <div style="margin-top:5px; color:#1a73e8;"><strong>[의견]</strong> ${item.opinion}</div>
+            `;
+            listContainer.appendChild(card);
+        });
+    }
+}
+</script>
+
+</body>
+</html>
